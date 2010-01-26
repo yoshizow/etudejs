@@ -1,6 +1,6 @@
 require 'parser'
 
-parser = JSParser.new
+parser = JSParser.new()
 while true
   print '> '; $stdout.flush
   str = $stdin.gets

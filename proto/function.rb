@@ -9,7 +9,7 @@ end
 class JSUserFunction < JSFunction
   def initialize(name = nil, outer_func = nil)
     assert_kind_of(String, name) if name != nil
-    assert_kind_of(JSFunction, outer_func) if outer_func != nil
+    assert_kind_of(JSUserFunction, outer_func) if outer_func != nil
 
     @name = name
     @outer_func = outer_func
@@ -95,12 +95,20 @@ class JSUserFunction < JSFunction
       elem = @code_array[i]
       str << elem.to_s
       case elem
-      when :INSN_CONST, :INSN_GETLVAR, :INSN_PUTLVAR,
-        :INSN_GETFORMAL, :INSN_PUTFORMAL, :INSN_CALL, :INSN_CALLMETHOD,
-        :INSN_DROP
+      when :INSN_CONST, :INSN_CALL, :INSN_CALLMETHOD,
+           :INSN_GETLVAR, :INSN_PUTLVAR, :INSN_GETFORMAL, :INSN_PUTFORMAL,
+           :INSN_JUMP, :INSN_JF
+        # takes 1 arg
         i += 1
         elem = @code_array[i]
-        str << "\t" << elem.to_s
+        str << "\t#{elem.to_s}"
+      when :INSN_GETLVAREX, :INSN_PUTLVAREX, :INSN_GETFORMALEX, :INSN_PUTFORMALEX
+        # takes 2 args
+        i += 1
+        elem1 = @code_array[i]
+        i += 1
+        elem2 = @code_array[i]
+        str << "\t#{elem1.to_s}, #{elem2.to_s}"
       end
       str << "\n"
       i += 1

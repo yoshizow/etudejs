@@ -69,6 +69,37 @@ class JSInterpreter
         pc += 1
         val = @stack.pop
         @frame.set_formal(idx, val)
+      when :INSN_GETLVAREX
+        link = code_array[pc]
+        pc += 1
+        idx = code_array[pc]
+        pc += 1
+        @stack.push(@frame.outer(link).get_lvar(idx))
+      when :INSN_PUTLVAREX
+        link = code_array[pc]
+        pc += 1
+        idx = code_array[pc]
+        pc += 1
+        val = @stack.pop
+        @frame.outer(link).set_lvar(idx, val)
+      when :INSN_GETFORMALEX
+        link = code_array[pc]
+        pc += 1
+        idx = code_array[pc]
+        pc += 1
+        @stack.push(@frame.outer(link).get_formal(idx))
+      when :INSN_PUTFORMALEX
+        link = code_array[pc]
+        pc += 1
+        idx = code_array[pc]
+        pc += 1
+        val = @stack.pop
+        @frame.outer(link).set_formal(idx, val)
+      when :INSN_CLOSURE
+        func = code_array[pc]
+        pc += 1
+        fnobj = JSFunctionObject.new(func, @frame)
+        @stack.push(fnobj)
       when :INSN_CALL
         nargs = code_array[pc]
         pc += 1
@@ -84,7 +115,7 @@ class JSInterpreter
           # Save current state
           @frame.saved_pc = pc
           # Switch to new frame
-          @frame = JSFrame.new(func, JSValue::NULL, args, @frame, nil)
+          @frame = JSFrame.new(func, JSValue::NULL, args, @frame, fnobj.outer_frame)
           code_array = @frame.func.code_array
           pc = 0
         end
@@ -114,9 +145,21 @@ class JSInterpreter
         @stack.push(@frame.this)
       when :INSN_DROP
         @stack.pop
+      when :INSN_DUP
+        @stack.push(@stack[-1])
+      when :INSN_JUMP
+        pc = code_array[pc]
+      when :INSN_JF
+        addr = code_array[pc]
+        pc += 1
+        val = @stack.pop
+        if val.to_boolean() == JSValue::FALSE
+          pc = addr
+        end
       else
-        raise "Unimplemented inst: ${insn}"
+        raise "Unimplemented inst: #{insn}"
       end
     end
   end
+
 end

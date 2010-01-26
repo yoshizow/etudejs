@@ -115,8 +115,20 @@ module JSAST
     def fields; [:expr, :args] end
   end
 
+  class Block < StatementBase
+    def fields; [:stmt_list] end
+  end
+
   class ExpressionStmt < StatementBase
     def fields; [:expr] end
+  end
+
+  class IfStmt < StatementBase
+    def fields; [:expr, :true_stmt, :false_stmt] end
+
+    def initialize(expr, true_stmt, false_stmt=nil)
+      super(expr, true_stmt, false_stmt)
+    end
   end
 
   class ReturnStmt < StatementBase
@@ -138,11 +150,15 @@ module JSAST
   end
 
   class VariableDeclList < ASTListBase
-    # List<JSAST::VariableDecl>
+    # List<VariableDecl>
   end
 
   class FormalParameterList < ASTListBase
     # List<String>
+  end
+
+  class StatementList < ASTListBase
+    # List<StatementBase>
   end
 
   class SourceElementList < ASTListBase

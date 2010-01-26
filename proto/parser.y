@@ -8,6 +8,7 @@ class JSParser
 #  preclow
   token IDENTIFIER NUMBER
   options no_result_var
+  expect 1
 rule
   start
     : Program
@@ -15,9 +16,9 @@ rule
 
   PrimaryExpression
     : IDENTIFIER
-      { PrimaryExpr.new(JSValue.new(:identifier, val[0])) }
+      { PrimaryExpr.new(JSValue.new_identifier(val[0])) }
     | NUMBER
-      { PrimaryExpr.new(JSValue.new(:number, val[0])) }
+      { PrimaryExpr.new(JSValue.new_number(val[0])) }
     | '(' Expression ')'
       { val[1] }
 
@@ -83,10 +84,27 @@ rule
       { BinaryExpr.new(val[1], val[0], val[2]) }
 
   Statement
-    : VariableStatement
+    : Block
+    | VariableStatement
     | EmptyStatement
     | ExpressionStatement
+    | IfStatement
     | ReturnStatement
+
+  Block
+    : '{' StatementListOpt '}'
+      { Block.new(val[1]) }
+
+  StatementListOpt
+    : StatementList
+    | /* empty */
+      { StatementList.new() }
+
+  StatementList
+    : Statement
+      { StatementList.new(val[0]) }
+    | StatementList Statement
+      { val[0].append(val[1]) }
 
   VariableStatement
     : 'var' VariableDeclarationList ';'
@@ -114,6 +132,12 @@ rule
   ExpressionStatement  # lookahead except [{, function] ってどうやるの？
     : Expression ';'
       { ExpressionStmt.new(val[0]) }
+
+  IfStatement
+    : 'if' '(' Expression ')' Statement 'else' Statement
+      { IfStmt.new(val[2], val[4], val[6]) }
+    | 'if' '(' Expression ')' Statement
+      { IfStmt.new(val[2], val[4]) }
 
   ReturnStatement
     : 'return' ExpressionOpt ';'

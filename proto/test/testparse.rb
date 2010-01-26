@@ -12,7 +12,7 @@ def test(file)
   puts "File: #{file}"
   src = IO.read(file)
   parser = JSParser.new
-  # parser.yydebug = true
+  parser.yydebug = true
   begin
     puts parser.parse(src).to_s
   rescue ParseError

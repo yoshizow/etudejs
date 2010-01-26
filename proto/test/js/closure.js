@@ -8,8 +8,8 @@ function make_inc() {
 }
 
 var fn = make_inc();
-var a = fn();  // => 1
-var b = fn();  // => 2
+log(fn());  // => 1
+log(fn());  // => 2
 
 /*
 

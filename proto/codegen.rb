@@ -6,6 +6,27 @@ require 'error'
 
 include Test::Unit::Assertions
 
+# Utility for resolving jump labels
+class JumpLabel
+  def initialize()
+    @list = []  # List<CodeArray, int>
+  end
+
+  # Mark a slot referring this label
+  def refer(code_array)
+    offset = code_array.size
+    code_array.push(nil)    # Dummy
+    @list.push([code_array, offset])
+  end
+
+  # Fill in slots referring this label
+  def resolve(address)
+    @list.each do |code_array, offset|
+      code_array[offset] = address
+    end
+  end
+end
+
 # Compile AST into bytecode
 class CodeGenVisitor < DefaultVisitor
   include JSAST
@@ -20,6 +41,26 @@ class CodeGenVisitor < DefaultVisitor
     @is_lhs = false
   end
 
+  # Resolve variable name according to the static scoping rule
+  # Return [:formal|:lvar, link, index], or nil if failed to resolve
+  def resolve_variable(name)
+    func = @current_func
+    link = 0
+    while func != nil
+      idx = func.formal_index(name)
+      if idx != -1
+        return [:formal, link, idx]
+      end
+      idx = func.lvar_index(name)
+      if idx != -1
+        return [:lvar, link, idx]
+      end
+      func = func.outer_func
+      link += 1
+    end
+    return nil
+  end
+
   # Resolve variable name and generate code for setting its value
   # Assumes that the value has already be pushed
   def gen_put_variable(code_array, name)
@@ -28,23 +69,24 @@ class CodeGenVisitor < DefaultVisitor
       name = name.value
     end
 
-    idx = @current_func.formal_index(name)
-    if idx != -1
-      code_array.push(:INSN_PUTFORMAL)
-      code_array.push(idx)
-      return
+    res = resolve_variable(name)
+    if res
+      type, link, idx = res
+      if link == 0
+        code_array.push(type == :formal ? :INSN_PUTFORMAL : :INSN_PUTLVAR)
+        code_array.push(idx)
+      else
+        code_array.push(type == :formal ? :INSN_PUTFORMALEX : :INSN_PUTLVAREX)
+        code_array.push(link)
+        code_array.push(idx)
+      end
+    else
+      # global variable
+      code_array.push(:INSN_GETGLOBAL)
+      code_array.push(:INSN_CONST)
+      code_array.push(JSValue.new_string(name))
+      code_array.push(:INSN_PUTPROP)
     end
-    idx = @current_func.lvar_index(name)
-    if idx != -1
-      code_array.push(:INSN_PUTLVAR)
-      code_array.push(idx)
-      return
-    end
-    # global variable
-    code_array.push(:INSN_GETGLOBAL)
-    code_array.push(:INSN_CONST)
-    code_array.push(JSValue.new(:string, name))
-    code_array.push(:INSN_PUTPROP)
   end
 
   # Resolve variable name and generate code for getting its value
@@ -54,23 +96,24 @@ class CodeGenVisitor < DefaultVisitor
       name = name.value
     end
 
-    idx = @current_func.formal_index(name)
-    if idx != -1
-      code_array.push(:INSN_GETFORMAL)
-      code_array.push(idx)
-      return
+    res = resolve_variable(name)
+    if res
+      type, link, idx = res
+      if link == 0
+        code_array.push(type == :formal ? :INSN_GETFORMAL : :INSN_GETLVAR)
+        code_array.push(idx)
+      else
+        code_array.push(type == :formal ? :INSN_GETFORMALEX : :INSN_GETLVAREX)
+        code_array.push(link)
+        code_array.push(idx)
+      end
+    else
+      # global variable
+      code_array.push(:INSN_GETGLOBAL)
+      code_array.push(:INSN_CONST)
+      code_array.push(JSValue.new_string(name))
+      code_array.push(:INSN_GETPROP)
     end
-    idx = @current_func.lvar_index(name)
-    if idx != -1
-      code_array.push(:INSN_GETLVAR)
-      code_array.push(idx)
-      return
-    end
-    # global variable
-    code_array.push(:INSN_GETGLOBAL)
-    code_array.push(:INSN_CONST)
-    code_array.push(JSValue.new(:string, name))
-    code_array.push(:INSN_GETPROP)
   end
 
   def visit_PrimaryExpr_LHS(node)
@@ -142,6 +185,7 @@ class CodeGenVisitor < DefaultVisitor
     end
 
     node.right.accept(self)
+    @current_code_array.push(:INSN_DUP)
     prev_lhs = @is_lhs
     @is_lhs = true
     node.left.accept(self)
@@ -155,7 +199,7 @@ class CodeGenVisitor < DefaultVisitor
         node.init.accept(self)
         @current_code_array.push(:INSN_GETGLOBAL)
         @current_code_array.push(:INSN_CONST)
-        @current_code_array.push(JSValue.new(:string, node.name))
+        @current_code_array.push(JSValue.new_string(node.name))
         @current_code_array.push(:INSN_PUTPROP)
       end
     else
@@ -199,10 +243,9 @@ class CodeGenVisitor < DefaultVisitor
 
     # Assign function obj to a variable which name corresponds to the
     # function name
-    obj = JSFunctionObject.new(func)
     tmp_code_array = []
-    tmp_code_array.push(:INSN_CONST)
-    tmp_code_array.push(obj)
+    tmp_code_array.push(:INSN_CLOSURE)
+    tmp_code_array.push(func)
     gen_put_variable(tmp_code_array, node.name)
     @current_code_array.insert(0, *tmp_code_array)
     # NOTE: 同じ名前で複数の関数を定義したとき最初のが優先されるバグ有り
@@ -221,9 +264,33 @@ class CodeGenVisitor < DefaultVisitor
     @current_code_array.push(nargs)
   end
 
+  def visit_Block(node)
+    node.stmt_list.accept(self)
+  end
+
   def visit_ExpressionStmt(node)
     node.expr.accept(self)
     @current_code_array.push(:INSN_DROP)
+  end
+
+  def visit_IfStmt(node)
+    node.expr.accept(self)
+    false_label = JumpLabel.new()
+    @current_code_array.push(:INSN_JF)
+    false_label.refer(@current_code_array)
+    node.true_stmt.accept(self)
+    if node.false_stmt
+      # if (expr) stmt; else stmt;
+      leave_label = JumpLabel.new()
+      @current_code_array.push(:INSN_JUMP)
+      leave_label.refer(@current_code_array)
+      false_label.resolve(@current_code_array.size)
+      node.false_stmt.accept(self)
+      leave_label.resolve(@current_code_array.size)
+    else
+      # if (expr) stmt;
+      false_label.resolve(@current_code_array.size)
+    end
   end
 
   def visit_ReturnStmt(node)
@@ -252,6 +319,13 @@ class CodeGenVisitor < DefaultVisitor
   def visit_VariableDeclList(node)
     node.list.each do |elem|
       assert_kind_of(VariableDecl, elem)
+      elem.accept(self)
+    end
+  end
+
+  def visit_StatementList(node)
+    node.list.each do |elem|
+      assert_kind_of(StatementBase, elem)
       elem.accept(self)
     end
   end

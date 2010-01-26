@@ -1,5 +1,5 @@
 class JSLexer
-  KEYWORDS = %w[var function return]
+  KEYWORDS = %w[var function return if else]
 
   def initialize(input)
     scanner = StringScanner.new(input)

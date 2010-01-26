@@ -1,5 +1,5 @@
 # Object System
 class JSObjectBase < JSValue
-  def initialize
+  def initialize()
   end
 end

@@ -1,7 +1,7 @@
 require 'object'
 
 class JSObjectObject < JSObjectBase
-  def initialize
+  def initialize()
     @properties = {}
   end
 

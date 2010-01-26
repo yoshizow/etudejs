@@ -42,4 +42,11 @@ class JSFrame
     assert_kind_of(JSValue, val)
     @lvar_slots[idx] = val
   end
+
+  # Get n-th outer frame
+  def outer(n)
+    frame = self
+    n.times { frame = frame.outer_frame }
+    return frame
+  end
 end
