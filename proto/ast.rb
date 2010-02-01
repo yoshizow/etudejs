@@ -131,6 +131,14 @@ module JSAST
     end
   end
 
+  class DoWhileStmt < StatementBase
+    def fields; [:expr, :body] end
+  end
+
+  class WhileStmt < StatementBase
+    def fields; [:expr, :body] end
+  end
+
   class ReturnStmt < StatementBase
     def fields; [:expr] end
 

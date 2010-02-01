@@ -97,7 +97,7 @@ class JSUserFunction < JSFunction
       case elem
       when :INSN_CONST, :INSN_CALL, :INSN_CALLMETHOD,
            :INSN_GETLVAR, :INSN_PUTLVAR, :INSN_GETFORMAL, :INSN_PUTFORMAL,
-           :INSN_JUMP, :INSN_JF
+           :INSN_JUMP, :INSN_JF, :INSN_JT
         # takes 1 arg
         i += 1
         elem = @code_array[i]

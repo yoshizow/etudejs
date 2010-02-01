@@ -1,5 +1,7 @@
 class JSLexer
-  KEYWORDS = %w[var function return if else]
+  KEYWORDS = %w[break else new var case finally return void catch
+                for switch while continue function this with
+                default if throw delete in try do instanceof typeof]
 
   def initialize(input)
     scanner = StringScanner.new(input)

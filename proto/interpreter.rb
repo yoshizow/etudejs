@@ -156,6 +156,13 @@ class JSInterpreter
         if val.to_boolean() == JSValue::FALSE
           pc = addr
         end
+      when :INSN_JT
+        addr = code_array[pc]
+        pc += 1
+        val = @stack.pop
+        if val.to_boolean() == JSValue::TRUE
+          pc = addr
+        end
       else
         raise "Unimplemented inst: #{insn}"
       end

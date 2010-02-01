@@ -89,6 +89,7 @@ rule
     | EmptyStatement
     | ExpressionStatement
     | IfStatement
+    | IterationStatement
     | ReturnStatement
 
   Block
@@ -138,6 +139,18 @@ rule
       { IfStmt.new(val[2], val[4], val[6]) }
     | 'if' '(' Expression ')' Statement
       { IfStmt.new(val[2], val[4]) }
+
+  IterationStatement
+    : DoWhileStatement
+    | WhileStatement
+
+  DoWhileStatement
+    : 'do' Statement 'while' '(' Expression ')' ';'
+      { DoWhileStmt.new(val[4], val[1]) }
+
+  WhileStatement
+    : 'while' '(' Expression ')' Statement
+      { WhileStmt.new(val[2], val[4]) }
 
   ReturnStatement
     : 'return' ExpressionOpt ';'

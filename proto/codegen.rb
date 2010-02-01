@@ -9,19 +9,26 @@ include Test::Unit::Assertions
 # Utility for resolving jump labels
 class JumpLabel
   def initialize()
-    @list = []  # List<CodeArray, int>
+    @unresolved_refs = []  # List<CodeArray, int>
+    @resolved_addr = nil
   end
 
-  # Mark a slot referring this label
+  # Put address of label, or mark a slot referring this label
   def refer(code_array)
-    offset = code_array.size
-    code_array.push(nil)    # Dummy
-    @list.push([code_array, offset])
+    if @resolved_addr
+      code_array.push(@resolved_addr)
+    else
+      offset = code_array.size
+      code_array.push(nil)    # Dummy
+      @unresolved_refs.push([code_array, offset])
+    end
   end
 
-  # Fill in slots referring this label
+  # Define label, or fill in slots referring this label
   def resolve(address)
-    @list.each do |code_array, offset|
+    assert_nil(@resolved_addr)
+    @resolved_addr = address
+    @unresolved_refs.each do |code_array, offset|
       code_array[offset] = address
     end
   end
@@ -293,9 +300,31 @@ class CodeGenVisitor < DefaultVisitor
     end
   end
 
+  def visit_DoWhileStmt(node)
+    loop_label = JumpLabel.new()
+    loop_label.resolve(@current_code_array.size)
+    node.body.accept(self)
+    node.expr.accept(self)
+    @current_code_array.push(:INSN_JT)
+    loop_label.refer(@current_code_array)
+  end
+
+  def visit_WhileStmt(node)
+    cond_label = JumpLabel.new()
+    @current_code_array.push(:INSN_JUMP)
+    cond_label.refer(@current_code_array)
+    loop_label = JumpLabel.new()
+    loop_label.resolve(@current_code_array.size)
+    node.body.accept(self)
+    cond_label.resolve(@current_code_array.size)
+    node.expr.accept(self)
+    @current_code_array.push(:INSN_JT)
+    loop_label.refer(@current_code_array)
+  end
+
   def visit_ReturnStmt(node)
     if @current_func.global_code?
-      raise JSSyntaxError.new('return statement found outside function doby')
+      raise JSSyntaxError.new('return statement found outside function body')
     end
     if node.expr
       node.expr.accept(self)
