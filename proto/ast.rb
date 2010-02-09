@@ -139,6 +139,14 @@ module JSAST
     def fields; [:expr, :body] end
   end
 
+  class ForStmt < StatementBase
+    def fields; [:init_expr, :cond_expr, :inc_expr, :body] end
+  end
+
+  class ForInStmt < StatementBase
+    def fields; [:lhs_expr, :rhs_expr, :body] end
+  end
+
   class ReturnStmt < StatementBase
     def fields; [:expr] end
 

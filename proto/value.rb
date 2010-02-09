@@ -68,7 +68,34 @@ class JSValue
     end
   end
 
-  # ToBoolean() operator defined in ECMA-262
+  # ECMA-262 3rd 11.8.5 The Abstract Relational Comparison Algorithm
+  def compare(other)
+    x = self.to_primitive(:number)
+    y = other.to_primitive(:number)
+    if x.type == :string && y.type == :string
+      raise 'implement me'
+    else
+      x = x.to_number()
+      y = y.to_number()
+      # TODO: check NaN, -0, +0, +Inf, -Inf, etc
+      if x.value < y.value
+        return JSValue::TRUE
+      else
+        return JSValue::FALSE
+      end
+    end
+  end
+
+  # ECMA-262 3rd 9.1 ToPrimitive() operator
+  def to_primitive(hint)
+    if @type == :object
+      raise 'implement me'
+    else
+      return self
+    end
+  end
+
+  # ECMA-262 3rd 9.2 ToBoolean() operator
   def to_boolean()
     case @type
     when :undefined
@@ -88,6 +115,30 @@ class JSValue
       raise 'implement me'
     when :object
       JSValue::TRUE
+    else
+      raise 'notreached'
+    end
+  end
+
+  # ECMA-262 3rd 9.3 ToNumber() operator
+  def to_number()
+    case @type
+    when :undefined
+      raise 'implement me'
+    when :null
+      JSValue.new_number(0)
+    when :boolean
+      if @value
+        JSValue.new_number(1)
+      else
+        JSValue.new_number(0)
+      end
+    when :number
+      self
+    when :string
+      raise 'implement me'
+    when :object
+      raise 'implement me'
     else
       raise 'notreached'
     end

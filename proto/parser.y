@@ -70,9 +70,50 @@ rule
     | AdditiveExpression '-' MultiplicativeExpression
       { BinaryExpr.new(val[1], val[0], val[2]) }
 
-  AssignmentExpression
+  RelationalExpression
+    : RelationalExpressionNoIn
+
+  RelationalExpressionNoIn
     : AdditiveExpression
+    | RelationalExpression '<' AdditiveExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | RelationalExpression '>' AdditiveExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | RelationalExpression '<=' AdditiveExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | RelationalExpression '>=' AdditiveExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+
+  EqualityExpression
+    : RelationalExpression
+    | EqualityExpression '==' RelationalExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpression '!=' RelationalExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpression '===' RelationalExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpression '!==' RelationalExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+
+  EqualityExpressionNoIn
+    : RelationalExpressionNoIn
+    | EqualityExpressionNoIn '==' RelationalExpressionNoIn
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpressionNoIn '!=' RelationalExpressionNoIn
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpressionNoIn '===' RelationalExpressionNoIn
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+    | EqualityExpressionNoIn '!==' RelationalExpressionNoIn
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+
+  AssignmentExpression
+  : EqualityExpression
     | LeftHandSideExpression AssignmentOperator AssignmentExpression
+      { AssignmentExpr.new(val[1], val[0], val[2]) }
+
+  AssignmentExpressionNoIn
+    : EqualityExpressionNoIn
+    | LeftHandSideExpression AssignmentOperator AssignmentExpressionNoIn
       { AssignmentExpr.new(val[1], val[0], val[2]) }
 
   AssignmentOperator
@@ -81,6 +122,11 @@ rule
   Expression
     : AssignmentExpression
     | Expression ',' AssignmentExpression
+      { BinaryExpr.new(val[1], val[0], val[2]) }
+
+  ExpressionNoIn
+    : AssignmentExpressionNoIn
+    | ExpressionNoIn ',' AssignmentExpressionNoIn
       { BinaryExpr.new(val[1], val[0], val[2]) }
 
   Statement
@@ -117,14 +163,30 @@ rule
     | VariableDeclarationList ',' VariableDeclaration
       { val[0].append(val[2]) }
 
+  VariableDeclarationListNoIn
+    : VariableDeclarationNoIn
+      { VariableDeclList.new(val[0]) }
+    | VariableDeclarationListNoIn ',' VariableDeclarationNoIn
+      { val[0].append(val[2]) }
+
   VariableDeclaration
     : IDENTIFIER
       { VariableDecl.new(val[0]) }
     | IDENTIFIER Initialiser
       { VariableDecl.new(val[0], val[1]) }
 
+  VariableDeclarationNoIn
+    : IDENTIFIER
+      { VariableDecl.new(val[0]) }
+    | IDENTIFIER InitialiserNoIn
+      { VariableDecl.new(val[0], val[1]) }
+
   Initialiser
     : '=' AssignmentExpression
+      { val[1] }
+
+  InitialiserNoIn
+    : '=' AssignmentExpressionNoIn
       { val[1] }
 
   EmptyStatement
@@ -143,6 +205,7 @@ rule
   IterationStatement
     : DoWhileStatement
     | WhileStatement
+    | ForStatement
 
   DoWhileStatement
     : 'do' Statement 'while' '(' Expression ')' ';'
@@ -152,12 +215,26 @@ rule
     : 'while' '(' Expression ')' Statement
       { WhileStmt.new(val[2], val[4]) }
 
+  ForStatement
+    : 'for' '(' ExpressionNoInOpt ';' ExpressionOpt ';' ExpressionOpt ')' Statement
+      { ForStmt.new(val[2], val[4], val[6], val[8]) }
+    | 'for' '(' 'var' VariableDeclarationListNoIn ';' ExpressionOpt ';' ExpressionOpt ')' Statement
+      { ForStmt.new(val[3], val[5], val[7], val[9]) }
+    | 'for' '(' LeftHandSideExpression 'in' Expression ')' Statement
+      { ForInStmt.new(val[2], val[4], val[6]) }
+    | 'for' '(' 'var' VariableDeclarationNoIn 'in' Expression ')' Statement
+      { ForInStmt.new(val[3], val[5], val[7]) }
+
   ReturnStatement
     : 'return' ExpressionOpt ';'
       { ReturnStmt.new(val[1]) }
 
   ExpressionOpt
     : Expression
+    | /* empty */
+
+  ExpressionNoInOpt
+    : ExpressionNoIn
     | /* empty */
 
   FunctionDeclaration

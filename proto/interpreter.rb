@@ -48,6 +48,50 @@ class JSInterpreter
         b = @stack.pop
         a = @stack.pop
         @stack.push(a.div(b))
+      when :INSN_LT
+        b = @stack.pop
+        a = @stack.pop
+        val = a.compare(b)
+        if val == JSValue::UNDEFINED
+          @stack.push(JSValue::FALSE)
+        else
+          @stack.push(val)
+        end
+      when :INSN_GT
+        b = @stack.pop
+        a = @stack.pop
+        val = b.compare(a)
+        if val == JSValue::UNDEFINED
+          @stack.push(JSValue::FALSE)
+        else
+          @stack.push(val)
+        end
+      when :INSN_LTEQ
+        b = @stack.pop
+        a = @stack.pop
+        val = b.compare(a)
+        if val == JSValue::FALSE
+          @stack.push(JSValue::TRUE)
+        else  # true or undefined
+          @stack.push(JSValue::FALSE)
+        end
+      when :INSN_GTEQ
+        b = @stack.pop
+        a = @stack.pop
+        val = a.compare(b)
+        if val == JSValue::FALSE
+          @stack.push(JSValue::TRUE)
+        else  # true or undefined
+          @stack.push(JSValue::FALSE)
+        end
+      when :INSN_EQ
+        raise 'implement me'
+      when :INSN_STRICTEQ
+        raise 'implement me'
+      when :INSN_NOTEQ
+        raise 'implement me'
+      when :INSN_STRICTNOTEQ
+        raise 'implement me'
       when :INSN_NEG
         a = @stack.pop
         @stack.push(a.neg())

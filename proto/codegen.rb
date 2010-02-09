@@ -179,6 +179,22 @@ class CodeGenVisitor < DefaultVisitor
       @current_code_array.push(:INSN_MUL)
     when '/'
       @current_code_array.push(:INSN_DIV)
+    when '<'
+      @current_code_array.push(:INSN_LT)
+    when '>'
+      @current_code_array.push(:INSN_GT)
+    when '<='
+      @current_code_array.push(:INSN_LTEQ)
+    when '>='
+      @current_code_array.push(:INSN_GTEQ)
+    when '=='
+      @current_code_array.push(:INSN_EQ)
+    when '==='
+      @current_code_array.push(:INSN_STRICTEQ)
+    when '!='
+      @current_code_array.push(:INSN_NOTEQ)
+    when '!=='
+      @current_code_array.push(:INSN_STRICTNOTEQ)
     else
       raise "implement me: #{node.op}"
     end
@@ -320,6 +336,37 @@ class CodeGenVisitor < DefaultVisitor
     node.expr.accept(self)
     @current_code_array.push(:INSN_JT)
     loop_label.refer(@current_code_array)
+  end
+
+  def visit_ForStmt(node)
+    if node.init_expr
+      if node.init_expr.kind_of?(VariableDeclList)
+        node.init_expr.accept(self)
+      else
+        assert_kind_of(ExpressionBase, node.init_expr)
+        node.init_expr.accept(self)
+        @current_code_array.push(:INSN_DROP)
+      end
+    end
+    cond_label = JumpLabel.new()
+    @current_code_array.push(:INSN_JUMP)
+    cond_label.refer(@current_code_array)
+    loop_label = JumpLabel.new()
+    loop_label.resolve(@current_code_array.size)
+    node.body.accept(self)
+    if node.inc_expr
+      node.inc_expr.accept(self)
+      @current_code_array.push(:INSN_DROP)
+    end
+    cond_label.resolve(@current_code_array.size)
+    if node.cond_expr
+      node.cond_expr.accept(self)
+      @current_code_array.push(:INSN_JT)
+      loop_label.refer(@current_code_array)
+    else
+      @current_code_array.push(:INSN_JUMP)
+      loop_label.refer(@current_code_array)
+    end
   end
 
   def visit_ReturnStmt(node)

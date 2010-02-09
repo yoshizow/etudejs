@@ -20,6 +20,8 @@ class JSLexer
         @tokens.push [scanner[0], scanner[0]]
       when scanner.scan(/[$_A-Za-z][$_A-Za-z0-9]*\b/)
         @tokens.push [:IDENTIFIER, scanner[0]]
+      when scanner.scan(/>=|<=|==|!=|===|!==/)
+        @tokens.push [scanner[0], scanner[0]]
       else
         s = scanner.getch
         @tokens.push [s, s]
