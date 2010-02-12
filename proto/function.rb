@@ -93,7 +93,7 @@ class JSUserFunction < JSFunction
     i = 0
     while i < @code_array.size
       elem = @code_array[i]
-      str << elem.to_s
+      str << "#{i}\t#{elem.to_s}"
       case elem
       when :INSN_CONST, :INSN_CALL, :INSN_CALLMETHOD,
            :INSN_GETLVAR, :INSN_PUTLVAR, :INSN_GETFORMAL, :INSN_PUTFORMAL,

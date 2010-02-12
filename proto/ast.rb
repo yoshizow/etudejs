@@ -147,6 +147,22 @@ module JSAST
     def fields; [:lhs_expr, :rhs_expr, :body] end
   end
 
+  class ContinueStmt < StatementBase
+    def fields; [:label] end
+
+    def init_expr(label=nil)
+      super(label)
+    end
+  end
+
+  class BreakStmt < StatementBase
+    def fields; [:label] end
+
+    def init_expr(label=nil)
+      super(label)
+    end
+  end
+
   class ReturnStmt < StatementBase
     def fields; [:expr] end
 

@@ -14,6 +14,10 @@ rule
     : Program
     | /* empty */ { 0 }
 
+  IdentifierOpt
+    : IDENTIFIER
+    | /* empty */
+
   PrimaryExpression
     : IDENTIFIER
       { PrimaryExpr.new(JSValue.new_identifier(val[0])) }
@@ -136,6 +140,8 @@ rule
     | ExpressionStatement
     | IfStatement
     | IterationStatement
+    | ContinueStatement
+    | BreakStatement
     | ReturnStatement
 
   Block
@@ -224,6 +230,14 @@ rule
       { ForInStmt.new(val[2], val[4], val[6]) }
     | 'for' '(' 'var' VariableDeclarationNoIn 'in' Expression ')' Statement
       { ForInStmt.new(val[3], val[5], val[7]) }
+
+  ContinueStatement
+    : 'continue' IdentifierOpt ';'
+      { ContinueStmt.new(val[1]) }
+
+  BreakStatement
+    : 'break' IdentifierOpt ';'
+      { BreakStmt.new(val[1]) }
 
   ReturnStatement
     : 'return' ExpressionOpt ';'

@@ -46,6 +46,16 @@ class CodeGenVisitor < DefaultVisitor
     @current_code_array = @current_func.code_array
     @processing_func_stack = []    # stack for @current_func and @current_code_array
     @is_lhs = false
+    @default_continue_label = nil
+    @default_break_label = nil
+  end
+
+  def fluid_let(var, val)
+    raise 'Only supports instance variable' if var.to_s[0] != ?@
+    backup = instance_variable_get(var)
+    instance_variable_set(var, val)
+    yield
+    instance_variable_set(var, backup)
   end
 
   # Resolve variable name according to the static scoping rule
@@ -209,10 +219,9 @@ class CodeGenVisitor < DefaultVisitor
 
     node.right.accept(self)
     @current_code_array.push(:INSN_DUP)
-    prev_lhs = @is_lhs
-    @is_lhs = true
-    node.left.accept(self)
-    @is_lhs = prev_lhs
+    fluid_let(:@is_lhs, true) do
+      node.left.accept(self)
+    end
   end
 
   def visit_VariableDecl(node)
@@ -319,10 +328,18 @@ class CodeGenVisitor < DefaultVisitor
   def visit_DoWhileStmt(node)
     loop_label = JumpLabel.new()
     loop_label.resolve(@current_code_array.size)
-    node.body.accept(self)
+    continue_label = JumpLabel.new()
+    break_label = JumpLabel.new()
+    fluid_let(:@default_continue_label, continue_label) do
+      fluid_let(:@default_break_label, break_label) do
+        node.body.accept(self)
+      end
+    end
+    continue_label.resolve(@current_code_array.size)
     node.expr.accept(self)
     @current_code_array.push(:INSN_JT)
     loop_label.refer(@current_code_array)
+    break_label.resolve(@current_code_array.size)
   end
 
   def visit_WhileStmt(node)
@@ -367,6 +384,26 @@ class CodeGenVisitor < DefaultVisitor
       @current_code_array.push(:INSN_JUMP)
       loop_label.refer(@current_code_array)
     end
+  end
+
+  def visit_ContinueStmt(node)
+    node.label == nil or assert_kind_of(String, node.label)
+    raise 'implement me' if node.label != nil
+    if @default_continue_label == nil
+      raise JSSyntaxError.new('continue statement found outside loop')
+    end
+    @current_code_array.push(:INSN_JUMP)
+    @default_continue_label.refer(@current_code_array)
+  end
+
+  def visit_BreakStmt(node)
+    node.label == nil or assert_kind_of(String, node.label)
+    raise 'implement me' if node.label != nil
+    if @default_break_label == nil
+      raise JSSyntaxError.new('break statement found outside loop and switch')
+    end
+    @current_code_array.push(:INSN_JUMP)
+    @default_break_label.refer(@current_code_array)
   end
 
   def visit_ReturnStmt(node)

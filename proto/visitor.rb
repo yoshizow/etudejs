@@ -40,6 +40,18 @@ class DefaultVisitor
     node.expr.accept(self)
   end
 
+  def visit_ContinueStmt(node)
+    if node.expr
+      node.expr.accept(self)
+    end
+  end
+
+  def visit_BreakStmt(node)
+    if node.expr
+      node.expr.accept(self)
+    end
+  end
+
   def visit_ReturnStmt(node)
     if node.expr
       node.expr.accept(self)
