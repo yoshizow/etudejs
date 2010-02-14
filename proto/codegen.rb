@@ -50,12 +50,17 @@ class CodeGenVisitor < DefaultVisitor
     @default_break_label = nil
   end
 
-  def fluid_let(var, val)
-    raise 'Only supports instance variable' if var.to_s[0] != ?@
-    backup = instance_variable_get(var)
-    instance_variable_set(var, val)
+  def fluid_let(hash)
+    hash.each do |var, val|
+      raise 'Only supports instance variable' if var.to_s[0] != ?@
+      backup = instance_variable_get(var)
+      hash[var] = backup
+      instance_variable_set(var, val)
+    end
     yield
-    instance_variable_set(var, backup)
+    hash.each do |var, backup|
+      instance_variable_set(var, backup)
+    end
   end
 
   # Resolve variable name according to the static scoping rule
@@ -219,7 +224,7 @@ class CodeGenVisitor < DefaultVisitor
 
     node.right.accept(self)
     @current_code_array.push(:INSN_DUP)
-    fluid_let(:@is_lhs, true) do
+    fluid_let(:@is_lhs => true) do
       node.left.accept(self)
     end
   end
@@ -273,6 +278,10 @@ class CodeGenVisitor < DefaultVisitor
     end
     exit_func_decl
 
+    # TODO: FunctionExpression を実装する場合、
+    # @is_lhs, @default_continue_label, @default_break_label を
+    # 一時的にデフォルト値に戻す必要がある。
+
     # Assign function obj to a variable which name corresponds to the
     # function name
     tmp_code_array = []
@@ -280,7 +289,7 @@ class CodeGenVisitor < DefaultVisitor
     tmp_code_array.push(func)
     gen_put_variable(tmp_code_array, node.name)
     @current_code_array.insert(0, *tmp_code_array)
-    # NOTE: 同じ名前で複数の関数を定義したとき最初のが優先されるバグ有り
+    # FIXME: 同じ名前で複数の関数を定義したとき最初のが優先されるバグ有り
     # - @current_code_array の他に @current_init_code_array を作る？
     # - JSFunction に各lvarの初期値も持たせる？
   end
@@ -330,10 +339,9 @@ class CodeGenVisitor < DefaultVisitor
     loop_label.resolve(@current_code_array.size)
     continue_label = JumpLabel.new()
     break_label = JumpLabel.new()
-    fluid_let(:@default_continue_label, continue_label) do
-      fluid_let(:@default_break_label, break_label) do
-        node.body.accept(self)
-      end
+    fluid_let(:@default_continue_label => continue_label,
+              :@default_break_label => break_label) do
+      node.body.accept(self)
     end
     continue_label.resolve(@current_code_array.size)
     node.expr.accept(self)
@@ -348,14 +356,29 @@ class CodeGenVisitor < DefaultVisitor
     cond_label.refer(@current_code_array)
     loop_label = JumpLabel.new()
     loop_label.resolve(@current_code_array.size)
-    node.body.accept(self)
+    break_label = JumpLabel.new()
+    fluid_let(:@default_continue_label => cond_label,
+              :@default_break_label => break_label) do
+      node.body.accept(self)
+    end
     cond_label.resolve(@current_code_array.size)
     node.expr.accept(self)
     @current_code_array.push(:INSN_JT)
     loop_label.refer(@current_code_array)
+    break_label.resolve(@current_code_array.size)
   end
 
   def visit_ForStmt(node)
+    # for (init_expr; cond_expr; inc_expr) body
+    # ->
+    #     init_expr
+    #     goto cond_label
+    # loop_label:
+    #     body
+    #     inc_expr
+    # cond_label:
+    #     cond_expr
+    #     if true goto loop_label
     if node.init_expr
       if node.init_expr.kind_of?(VariableDeclList)
         node.init_expr.accept(self)
@@ -370,7 +393,13 @@ class CodeGenVisitor < DefaultVisitor
     cond_label.refer(@current_code_array)
     loop_label = JumpLabel.new()
     loop_label.resolve(@current_code_array.size)
-    node.body.accept(self)
+    continue_label = JumpLabel.new()
+    break_label = JumpLabel.new()
+    fluid_let(:@default_continue_label => continue_label,
+              :@default_break_label => break_label) do
+      node.body.accept(self)
+    end
+    continue_label.resolve(@current_code_array.size)
     if node.inc_expr
       node.inc_expr.accept(self)
       @current_code_array.push(:INSN_DROP)
@@ -384,6 +413,7 @@ class CodeGenVisitor < DefaultVisitor
       @current_code_array.push(:INSN_JUMP)
       loop_label.refer(@current_code_array)
     end
+    break_label.resolve(@current_code_array.size)
   end
 
   def visit_ContinueStmt(node)
