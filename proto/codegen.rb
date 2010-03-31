@@ -34,6 +34,67 @@ class JumpLabel
   end
 end
 
+# Dictionary for break/continue labels
+class LabelScope
+  def initialize
+    @named_labels = {}
+    @named_labels[:break] = {}
+    @named_labels[:continue] = {}
+    @anon_label_stack = []
+  end
+
+  def put_named_label(names, type, label)
+    assert_type(type)
+    names.each do |name|
+      if @named_labels[type][name]
+        raise JSSyntaxError.new('labels duplicated: ' + name)
+      else
+        @named_labels[type][name] = label
+      end
+    end
+  end
+
+  def remove_named_label(names, type)
+    assert_type(type)
+    names.each do |name|
+      @named_labels[type].delete(name)
+    end
+  end
+
+  def push_anon_labels(break_label, continue_label)
+    assert_not_nil(break_label)
+    assert_not_nil(continue_label)
+    @anon_label_stack.push({ :break=>break_label, :continue=>continue_label })
+  end
+
+  def pop_anon_labels()
+    assert(! @anon_label_stack.empty?)
+    @anon_label_stack.pop
+  end
+
+  # Return JumpLabel or nil if not found
+  def get_named_label(name, type)
+    assert_type(type)
+    @named_labels[type][name]
+  end
+
+  # Return JumpLabel or nil if not found
+  def get_anon_label(type)
+    assert_type(type)
+    top = @anon_label_stack.last
+    if top
+      top[type]
+    else
+      nil
+    end
+  end
+
+  def assert_type(type)
+    assert(type == :break || type == :continue)
+  end
+  private :assert_type
+end
+
 # Compile AST into bytecode
 class CodeGenVisitor < DefaultVisitor
   include JSAST
@@ -43,11 +104,14 @@ class CodeGenVisitor < DefaultVisitor
     assert_kind_of(JSUserFunction, func)
 
     @current_func = func
+    # TODO: @current_code_array は CodeBuffer みたいな別クラスに
+    # 分離する。すると loop_label.resolve(@current_code_array.size)
+    # みたいなのが codebuf.resolve_label(loop_label) と書ける。
     @current_code_array = @current_func.code_array
-    @processing_func_stack = []    # stack for @current_func and @current_code_array
     @is_lhs = false
     @default_continue_label = nil
     @default_break_label = nil
+    @label_scope = LabelScope.new()
   end
 
   def fluid_let(hash)
@@ -250,16 +314,6 @@ class CodeGenVisitor < DefaultVisitor
     end
   end
 
-  def enter_func_decl(func)
-    @processing_func_stack.push([@current_func, @current_code_array])
-    @current_func = func
-    @current_code_array = func.code_array
-  end
-
-  def exit_func_decl
-    @current_func, @current_code_array = @processing_func_stack.pop
-  end
-
   def visit_FunctionDecl(node)
     func = JSUserFunction.new(node.name, @current_func)
     func.add_formals(node.formals.list)
@@ -268,15 +322,17 @@ class CodeGenVisitor < DefaultVisitor
     lookup = LVarLookupVisitor.new(func)
     node.body.accept(lookup)
 
-    enter_func_decl(func)
-    node.body.accept(self)
-    # Insert return instruction if needed
-    if @current_code_array[-1] != :INSN_RETURN
-      @current_code_array.push(:INSN_CONST)
-      @current_code_array.push(JSValue::UNDEFINED)
-      @current_code_array.push(:INSN_RETURN)
+    fluid_let(:@current_func => func,
+              :@current_code_arry => func.code_array,
+              :@label_scope => LabelScope.new()) do
+      node.body.accept(self)
+      # Insert return instruction if needed
+      if @current_code_array[-1] != :INSN_RETURN
+        @current_code_array.push(:INSN_CONST)
+        @current_code_array.push(JSValue::UNDEFINED)
+        @current_code_array.push(:INSN_RETURN)
+      end
     end
-    exit_func_decl
 
     # TODO: FunctionExpression を実装する場合、
     # @is_lhs, @default_continue_label, @default_break_label を
@@ -309,6 +365,10 @@ class CodeGenVisitor < DefaultVisitor
     node.stmt_list.accept(self)
   end
 
+  def visit_VariableStmt(node)
+    node.list.accept(self)
+  end
+
   def visit_ExpressionStmt(node)
     node.expr.accept(self)
     @current_code_array.push(:INSN_DROP)
@@ -339,9 +399,14 @@ class CodeGenVisitor < DefaultVisitor
     loop_label.resolve(@current_code_array.size)
     continue_label = JumpLabel.new()
     break_label = JumpLabel.new()
-    fluid_let(:@default_continue_label => continue_label,
-              :@default_break_label => break_label) do
-      node.body.accept(self)
+    if node.label_stmt != nil
+      @label_scope.put_named_label(node.label_stmt.labels, :continue, continue_label)
+    end
+    @label_scope.push_anon_labels(break_label, continue_label)
+    node.body.accept(self)
+    @label_scope.pop_anon_labels()
+    if node.label_stmt != nil
+      @label_scope.remove_named_label(node.label_stmt.labels, :continue)
     end
     continue_label.resolve(@current_code_array.size)
     node.expr.accept(self)
@@ -357,9 +422,14 @@ class CodeGenVisitor < DefaultVisitor
     loop_label = JumpLabel.new()
     loop_label.resolve(@current_code_array.size)
     break_label = JumpLabel.new()
-    fluid_let(:@default_continue_label => cond_label,
-              :@default_break_label => break_label) do
-      node.body.accept(self)
+    if node.label_stmt != nil
+      @label_scope.put_named_label(node.label_stmt.labels, :continue, cond_label)
+    end
+    @label_scope.push_anon_labels(break_label, cond_label)
+    node.body.accept(self)
+    @label_scope.pop_anon_labels()
+    if node.label_stmt != nil
+      @label_scope.remove_named_label(node.label_stmt.labels, :continue)
     end
     cond_label.resolve(@current_code_array.size)
     node.expr.accept(self)
@@ -395,9 +465,14 @@ class CodeGenVisitor < DefaultVisitor
     loop_label.resolve(@current_code_array.size)
     continue_label = JumpLabel.new()
     break_label = JumpLabel.new()
-    fluid_let(:@default_continue_label => continue_label,
-              :@default_break_label => break_label) do
-      node.body.accept(self)
+    if node.label_stmt != nil
+      @label_scope.put_named_label(node.label_stmt.labels, :continue, continue_label)
+    end
+    @label_scope.push_anon_labels(break_label, continue_label)
+    node.body.accept(self)
+    @label_scope.pop_anon_labels()
+    if node.label_stmt != nil
+      @label_scope.remove_named_label(node.label_stmt.labels, :continue)
     end
     continue_label.resolve(@current_code_array.size)
     if node.inc_expr
@@ -417,23 +492,41 @@ class CodeGenVisitor < DefaultVisitor
   end
 
   def visit_ContinueStmt(node)
-    node.label == nil or assert_kind_of(String, node.label)
-    raise 'implement me' if node.label != nil
-    if @default_continue_label == nil
-      raise JSSyntaxError.new('continue statement found outside loop')
+    if node.label != nil
+      assert_kind_of(String, node.label)
+      label = @label_scope.get_named_label(node.label, :continue)
+      if label == nil
+        raise JSSyntaxError.new('continue target not found: ' + node.label)
+      end
+      @current_code_array.push(:INSN_JUMP)
+      label.refer(@current_code_array)
+    else
+      label = @label_scope.get_anon_label(:continue)
+      if label == nil
+        raise JSSyntaxError.new('continue statement found outside loop')
+      end
+      @current_code_array.push(:INSN_JUMP)
+      label.refer(@current_code_array)
     end
-    @current_code_array.push(:INSN_JUMP)
-    @default_continue_label.refer(@current_code_array)
   end
 
   def visit_BreakStmt(node)
-    node.label == nil or assert_kind_of(String, node.label)
-    raise 'implement me' if node.label != nil
-    if @default_break_label == nil
-      raise JSSyntaxError.new('break statement found outside loop and switch')
+    if node.label != nil
+      assert_kind_of(String, node.label)
+      label = @label_scope.get_named_label(node.label, :break)
+      if label != nil
+        raise JSSyntaxError.new('break target not found: ' + node.label)
+      end
+      @current_code_array.push(:INSN_JUMP)
+      label.refer(@current_code_array)
+    else
+      label = @label_scope.get_anon_label(:break)
+      if label == nil
+        raise JSSyntaxError.new('break statement found outside loop and switch')
+      end
+      @current_code_array.push(:INSN_JUMP)
+      label.refer(@current_code_array)
     end
-    @current_code_array.push(:INSN_JUMP)
-    @default_break_label.refer(@current_code_array)
   end
 
   def visit_ReturnStmt(node)
@@ -448,8 +541,12 @@ class CodeGenVisitor < DefaultVisitor
     @current_code_array.push(:INSN_RETURN)
   end
 
-  def visit_VariableStmt(node)
-    node.list.accept(self)
+  def visit_LabelledStmt(node)
+    break_label = JumpLabel.new()
+    @label_scope.put_named_label(node.labels, :break, break_label)
+    node.statement.accept(self)
+    @label_scope.remove_named_label(node.labels, :break)
+    break_label.resolve(@current_code_array.size)
   end
 
   def visit_ArgumentList(node)
