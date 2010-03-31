@@ -143,6 +143,7 @@ rule
     | ContinueStatement
     | BreakStatement
     | ReturnStatement
+    | LabelledStatement
 
   Block
     : '{' StatementListOpt '}'
@@ -242,6 +243,25 @@ rule
   ReturnStatement
     : 'return' ExpressionOpt ';'
       { ReturnStmt.new(val[1]) }
+
+  LabelledStatement
+    : IDENTIFIER ':' Statement
+  {
+    label = val[0]
+    stmt = val[2]
+    # In case of nested LabelledStatements, unify them into one node
+    if stmt.kind_of?(LabelledStmt)
+      if stmt.labels.include?(label)
+        raise JSSyntaxError.new('labels duplicated: ' + label)
+      end
+      stmt.add_label(label)
+      stmt
+    else
+      labelled_stmt = LabelledStmt.new(label, stmt)
+      stmt.set_label_stmt(labelled_stmt)
+      labelled_stmt
+    end
+  }
 
   ExpressionOpt
     : Expression
