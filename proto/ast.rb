@@ -1,3 +1,7 @@
+require 'test/unit'
+
+include Test::Unit::Assertions
+
 module JSAST
   # This class implements some of templating by reflection instead of
   # code generation.
@@ -68,6 +72,17 @@ module JSAST
   end
 
   class StatementBase < ASTNodeBase
+    def initialize(*args)
+      super(*args)
+      @label_stmt = nil
+    end
+
+    def set_label_stmt(labelled_stmt)
+      assert_kind_of(LabelledStmt, labelled_stmt)
+      @label_stmt = labelled_stmt
+    end
+
+    attr_reader :label_stmt
   end
 
   # Nodes
@@ -117,6 +132,10 @@ module JSAST
 
   class Block < StatementBase
     def fields; [:stmt_list] end
+  end
+
+  class VariableStmt < StatementBase
+    def fields; [:list] end
   end
 
   class ExpressionStmt < StatementBase
@@ -171,8 +190,17 @@ module JSAST
     end
   end
 
-  class VariableStmt < StatementBase
-    def fields; [:list] end
+  class LabelledStmt < StatementBase
+    def fields; [:labels, :statement] end
+
+    def initialize(label, statement)
+      super([label], statement)
+    end
+
+    def add_label(name)
+      assert(! @labels.include(name))
+      @labels << name
+    end
   end
 
   # Lists
