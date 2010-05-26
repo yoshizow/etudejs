@@ -63,7 +63,6 @@ class LabelScope
 
   def push_anon_labels(break_label, continue_label)
     assert_not_nil(break_label)
-    assert_not_nil(continue_label)
     @anon_label_stack.push({ :break=>break_label, :continue=>continue_label })
   end
 
@@ -81,11 +80,23 @@ class LabelScope
   # Return JumpLabel or nil if not found
   def get_anon_label(type)
     assert_type(type)
-    top = @anon_label_stack.last
-    if top
-      top[type]
+    if @anon_label_stack.empty?
+      return nil
     else
-      nil
+      # every label stack have break label, but not necessarily for
+      #  continue label; e.g. switch statement
+      if type == :break
+        top = @anon_label_stack[-1]
+        return top[:break]
+      else
+        # Find innermost continue label
+        (@anon_label_stack.size-1).downto(0) do |idx|
+          top = @anon_label_stack[idx]
+          label = top[:continue]
+          return label  if label
+        end
+        return nil
+      end
     end
   end
 
@@ -546,6 +557,76 @@ class CodeGenVisitor < DefaultVisitor
     @label_scope.put_named_label(node.labels, :break, break_label)
     node.statement.accept(self)
     @label_scope.remove_named_label(node.labels, :break)
+    break_label.resolve(@current_code_array.size)
+  end
+
+  def visit_SwitchStmt(node)
+    # Code generation for condswitch
+    #
+    #   ---------- Repeat
+    #   dup
+    #   put expr1
+    #   strictnoteq
+    #   if true goto label_c1
+    #   drop
+    #   goto label_1
+    # label_c1:
+    #   .....
+    #   ----------
+    #   goto label_default (or break_label)
+    #   ---------- Repeat
+    # label_1:
+    #   stmt1
+    #   .....
+    #   ----------
+    # label_default:
+    #   stmt_default   #optional
+    # break_label:
+    #
+    assert_kind_of(CaseClauseList, node.case_block)
+    node.expr.accept(self)
+    break_label = JumpLabel.new()
+    # Generate jump code
+    case_labels = []
+    node.case_block.list.each do |clause|
+      assert_kind_of(CaseClause, clause)
+      next if clause.expr == nil  # skip default clause here
+      @current_code_array.push(:INSN_DUP)
+      clause.expr.accept(self)
+      @current_code_array.push(:INSN_STRICTNOTEQ)
+      @current_code_array.push(:INSN_JT)
+      tmp_label = JumpLabel.new()
+      tmp_label.refer(@current_code_array)
+      @current_code_array.push(:INSN_DROP)
+      @current_code_array.push(:INSN_JUMP)
+      case_label = JumpLabel.new()
+      case_label.refer(@current_code_array)
+      case_labels << case_label
+      tmp_label.resolve(@current_code_array.size)
+    end
+    default_label = nil
+    if node.case_block.default_clause
+      default_label = JumpLabel.new()
+      @current_code_array.push(:INSN_JUMP)
+      default_label.refer(@current_code_array)
+    else
+      @current_code_array.push(:INSN_JUMP)
+      break_label.refer(@current_code_array)
+    end
+    # Generate statements
+    @label_scope.push_anon_labels(break_label, nil)
+    idx = 0
+    node.case_block.list.each do |clause|
+      if clause.expr != nil
+        case_labels[idx].resolve(@current_code_array.size)
+        idx += 1
+        clause.stmt_list.accept(self)
+      else  # default clause
+        default_label.resolve(@current_code_array.size)
+        clause.stmt_list.accept(self)
+      end
+    end
+    @label_scope.pop_anon_labels()
     break_label.resolve(@current_code_array.size)
   end
 

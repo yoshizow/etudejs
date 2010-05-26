@@ -144,6 +144,7 @@ rule
     | BreakStatement
     | ReturnStatement
     | LabelledStatement
+    | SwitchStatement
 
   Block
     : '{' StatementListOpt '}'
@@ -262,6 +263,35 @@ rule
       labelled_stmt
     end
   }
+
+  SwitchStatement
+    : 'switch' '(' Expression ')' CaseBlock
+      { SwitchStmt.new(val[2], val[4]) }
+
+  CaseBlock
+    : '{' CaseClausesOpt '}'
+      { val[1] }
+    | '{' CaseClausesOpt DefaultClause CaseClausesOpt '}'
+      { val[1].append_default(val[2]).merge(val[3]) }
+
+  CaseClausesOpt
+   : CaseClauses
+   | /* empty */
+     { CaseClauseList.new() }
+
+  CaseClauses
+   : CaseClause
+     { CaseClauseList.new(val[0]) }
+   | CaseClauses CaseClause
+     { val[0].append(val[1]) }
+
+  CaseClause
+   : 'case' Expression ':' StatementListOpt
+     { CaseClause.new(val[1], val[3]) }
+
+  DefaultClause
+   : 'default' ':' StatementListOpt
+     { CaseClause.new(nil, val[2]) }
 
   ExpressionOpt
     : Expression

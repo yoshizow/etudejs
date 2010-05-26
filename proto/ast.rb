@@ -203,6 +203,14 @@ module JSAST
     end
   end
 
+  class SwitchStmt < StatementBase
+    def fields; [:expr, :case_block] end
+  end
+
+  class CaseClause < StatementBase
+    def fields; [:expr, :stmt_list] end
+  end
+
   # Lists
 
   class ArgumentList < ASTListBase
@@ -219,6 +227,33 @@ module JSAST
 
   class StatementList < ASTListBase
     # List<StatementBase>
+  end
+
+  class CaseClauseList < ASTListBase
+    # List<CaseClause>
+
+    def initialize(elem=nil)
+      super
+      @default_clause = nil
+    end
+
+    attr_reader :default_clause
+
+    def merge(other)
+      assert_kind_of(CaseClauseList, other)
+
+      @list.concat(other.list)
+      return self
+    end
+
+    def append_default(elem)
+      assert_kind_of(CaseClause, elem)
+      assert_nil(@default_clause)
+
+      append(elem)
+      @default_clause = elem
+      return self
+    end
   end
 
   class SourceElementList < ASTListBase

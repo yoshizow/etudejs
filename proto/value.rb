@@ -8,6 +8,10 @@ class JSValue
   #   :object
   #   :identifier    # internal type
 
+  # internal format of number type:
+  #   rely on Ruby's native Numeric type coercion
+  #   manually convert type when needed
+
   def self.new_number(value)
     self.new(:number, value)
   end
@@ -86,6 +90,52 @@ class JSValue
     end
   end
 
+  # ECMA-262 3rd 11.9.3 The Abstract Equality Comparison Algorithm
+  def abstract_equal?(other)
+    raise 'implement me'
+  end
+
+  # ECMA-262 3rd 11.9.6 The Strict Equality Comparison Algorithm
+  def strict_equal?(other)
+    return JSValue::FALSE if self.type != other.type
+    return JSValue::TRUE  if self.type == :undefined
+    return JSValue::TRUE  if self.type == :null
+    if self.type == :number
+      self_f = self.value.to_f
+      if self_f.nan?
+        return JSValue::FALSE
+      end
+      other_f = other.value.to_f
+      if other_f.nan?
+        return JSValue::FALSE
+      end
+      if self.value == other.value  # includes +0 and -0
+        return JSValue::TRUE
+      end
+      return JSValue::FALSE
+    else
+      if self.type == :string
+        if self.value == other.value
+          return JSValue::TRUE
+        else
+          return JSValue::FALSE
+        end
+      elsif self.type == :boolean
+        if self.value == other.value
+          return JSValue::TRUE
+        else
+          return JSValue::FALSE
+        end
+      else
+        if self.equal?(other)  # check if these refer to same objects
+          return JSValue::TRUE
+        else
+          return JSValue::FALSE
+        end
+      end
+    end
+  end
+
   # ECMA-262 3rd 9.1 ToPrimitive() operator
   def to_primitive(hint)
     if @type == :object
@@ -141,6 +191,15 @@ class JSValue
       raise 'implement me'
     else
       raise 'notreached'
+    end
+  end
+
+  # ECMA-262 3rd 11.4.9 Logical NOT Operator
+  def log_not()
+    if self.to_boolean().value
+      JSValue::FALSE
+    else
+      JSValue::TRUE
     end
   end
 

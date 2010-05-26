@@ -87,11 +87,15 @@ class JSInterpreter
       when :INSN_EQ
         raise 'implement me'
       when :INSN_STRICTEQ
-        raise 'implement me'
+        b = @stack.pop
+        a = @stack.pop
+        @stack.push(a.strict_equal?(b))
       when :INSN_NOTEQ
         raise 'implement me'
       when :INSN_STRICTNOTEQ
-        raise 'implement me'
+        b = @stack.pop
+        a = @stack.pop
+        @stack.push(a.strict_equal?(b).log_not())
       when :INSN_NEG
         a = @stack.pop
         @stack.push(a.neg())
