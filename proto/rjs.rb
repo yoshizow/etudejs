@@ -1,3 +1,7 @@
+SCRIPTDIR = File.dirname($0)
+
+$LOAD_PATH << SCRIPTDIR + '/..'
+
 require 'parser'
 
 parser = JSParser.new()

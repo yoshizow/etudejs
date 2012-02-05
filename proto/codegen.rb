@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 require 'test/unit'
 require 'visitor'
 require 'lvarlookup'
@@ -334,7 +336,7 @@ class CodeGenVisitor < DefaultVisitor
     node.body.accept(lookup)
 
     fluid_let(:@current_func => func,
-              :@current_code_arry => func.code_array,
+              :@current_code_array => func.code_array,
               :@label_scope => LabelScope.new()) do
       node.body.accept(self)
       # Insert return instruction if needed

@@ -1,25 +1,30 @@
 RACC_DEBUG = -g -v
 
-.PHONY: synthetic testparse test distclean
+.PHONY: build synthetic testparse test distclean
 
-all: test
+all: build
+
+build: synthetic
 
 synthetic: parser.rb
 
-testparse: synthetic
+testparse: build
 	ruby test/testparse.rb $(ARG)
 
-testcodegen: synthetic
+testcodegen: build
 	ruby test/testcodegen.rb $(ARG)
 
-testinterp: synthetic
+testinterp: build
 	ruby test/testinterp.rb $(ARG)
 
-test: synthetic
-	ruby rjs.rb
+#test: build
+#	ruby rjs.rb
 
 parser.rb: parser.y
 	racc $(RACC_DEBUG) -o $@ $<
 
-distclean:
+clean:
+	rm -f parser.output
+
+distclean: clean
 	rm -f parser.rb
